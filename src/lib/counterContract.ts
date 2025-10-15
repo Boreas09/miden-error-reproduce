@@ -87,12 +87,22 @@ export async function incrementCounterContract(): Promise<void> {
     console.log("Account imported: ", counterContractAccount.id().toString());
 
     // Building the transaction script which will call the counter contract
+
+    //! txScriptCode below works
+    // let txScriptCode = `
+    //       use.external_contract::counter_contract
+    //       begin
+    //           call.0x579290e3789d6747c3e48b778e3a6b99389c60958c67a7e7d4edf0abf602cb57
+    //       end
+    //     `;
+
+    //! this is not working
     let txScriptCode = `
-    use.external_contract::counter_contract
-    begin
-        call.counter_contract::increment_count
-    end
-  `;
+        use.external_contract::counter_contract
+        begin
+            call.counter_contract::increment_count
+        end
+    `;
 
     // Creating the library to call the counter contract
     let counterComponentLib = AssemblerUtils.createAccountComponentLibrary(

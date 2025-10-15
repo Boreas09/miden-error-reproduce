@@ -1,21 +1,6 @@
 import {
     AccountId,
-    AssemblerUtils,
     Felt,
-    FeltArray,
-    FungibleAsset,
-    Note,
-    NoteAssets,
-    NoteExecutionHint,
-    NoteInputs,
-    NoteMetadata,
-    NoteRecipient,
-    NoteTag,
-    NoteType,
-    OutputNote,
-    OutputNotesArray,
-    TransactionKernel,
-    TransactionRequestBuilder,
     Word,
 } from '@demox-labs/miden-sdk';
 import {
@@ -23,7 +8,7 @@ import {
     type MidenTransaction,
     TransactionType,
 } from '@demox-labs/miden-wallet-adapter';
-import { accountIdToBech32 } from './midenClient';
+import { accountIdToBech32, safeAccountImport } from './midenClient';
 import REGISTER_NOTE from "./notes/register_name.masm?raw"
 import REGISTER_LIB from "./notes/miden_id/registry.masm?raw"
 
@@ -106,6 +91,34 @@ export async function registerName({
     requestTransaction,
 }: NoteFromMasmParams): Promise<{ txId: string; noteId: string }> {
     try {
+        const {
+            AssemblerUtils,
+            Felt,
+            FeltArray,
+            FungibleAsset,
+            Note,
+            NoteAssets,
+            NoteExecutionHint,
+            NoteInputs,
+            NoteMetadata,
+            NoteRecipient,
+            NoteTag,
+            NoteType,
+            OutputNote,
+            OutputNotesArray,
+            TransactionKernel,
+            TransactionRequestBuilder,
+            WebClient
+        } = await import("@demox-labs/miden-sdk");
+
+
+        const nodeEndpoint = "https://rpc.testnet.miden.io";
+        const client = await WebClient.createClient(nodeEndpoint);
+        console.log("Current block number: ", (await client.syncState()).blockNum());
+
+        safeAccountImport(client, destinationAccountId);
+        safeAccountImport(client, senderAccountId);
+
         let assembler = TransactionKernel.assembler().withDebugMode(true);
 
         let registerComponentLib = AssemblerUtils.createAccountComponentLibrary(assembler, "miden_id::registry", REGISTER_LIB);
@@ -113,7 +126,7 @@ export async function registerName({
         let script = assembler.withLibrary(registerComponentLib).compileNoteScript(REGISTER_NOTE)
 
         // Sync state to get latest blockchain data
-        // await client.syncState();
+        await client.syncState();
 
         // Create a new serial number for the note
         const serialNumber = generateRandomSerialNumber();
@@ -148,27 +161,32 @@ export async function registerName({
             new NoteRecipient(serialNumber, script, noteInputs)
         )
 
-        console.log(note.recipient().inputs().values().map(f => f.toString()))
-
         const noteId = note.id().toString()
 
         let transactionRequest = new TransactionRequestBuilder()
             .withOwnOutputNotes(new OutputNotesArray([OutputNote.full(note)]))
             .build();
 
-        const tx = new CustomTransaction(
-            accountIdToBech32(senderAccountId), // from
-            accountIdToBech32(destinationAccountId), // to
+        let txResult = await client.newTransaction(
+            senderAccountId,
             transactionRequest,
-            [],
-            [],
         );
 
-        const txId = await requestTransaction({ type: TransactionType.Custom, payload: tx });
+        await client.submitTransaction(txResult)
 
-        console.log("Transaction submitted. ID:", txId);
+        // const tx = new CustomTransaction(
+        //     accountIdToBech32(senderAccountId), // from
+        //     accountIdToBech32(destinationAccountId), // to
+        //     transactionRequest,
+        //     [noteId],
+        //     [],
+        // );
 
-        return { txId, noteId };
+        // const txId = await requestTransaction({ type: TransactionType.Custom, payload: tx });
+
+        // console.log("Transaction submitted. ID:", txId);
+
+        return { txId: "", noteId };
     } catch (error) {
         console.error("Note transaction failed:", error);
         throw new Error("Note transaction failed");
